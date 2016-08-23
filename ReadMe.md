@@ -1,0 +1,3 @@
+# xsens_standalone
+
+This is just a small program that does not depend on the ROS framework that allows for communication with the xsens imus. Most code was taken from [ethz-asl/ethzasl_xsens_driver](https://github.com/ethz-asl/ethzasl_xsens_driver) package, but all version of ROS have been removed. In the main script there is a way to specify what measurements should be reported from the IMU. Currently the linear acceleration, angular velocity, magnetometer, and orientation are being recorded.
