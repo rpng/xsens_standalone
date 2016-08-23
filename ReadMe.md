@@ -12,7 +12,7 @@ This is just a small program that does not depend on the ROS framework that allo
 
 ## Configuration
 
-One can configure the IMU using a series of strings. This information can also be found in the bottom of the `mtdevice.py` file.
+One can configure the IMU using a series of strings. This information can also be found in the bottom of the `mtdevice.py` file. One can then call `mtdevice.get_output_config(args)` to get the config file, and then finally configure the IMU by calling `SetOutputConfiguration()`. 
 
 
 ```
