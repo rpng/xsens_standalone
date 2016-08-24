@@ -1,0 +1,8 @@
+package exlcm;
+
+struct imu_mag_t
+{
+    int64_t  timestamp;
+    string   frame;
+    float    data[3];
+}

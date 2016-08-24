@@ -1,0 +1,7 @@
+package exlcm;
+
+struct imu_ori_t
+{
+    int64_t  timestamp;
+    float    data[4];
+}

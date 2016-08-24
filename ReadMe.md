@@ -3,6 +3,10 @@
 This is just a small program that does not depend on the ROS framework that allows for communication with the xsens imus. Most code was taken from [ethz-asl/ethzasl_xsens_driver](https://github.com/ethz-asl/ethzasl_xsens_driver) package, but all version of ROS have been removed. In the main script there is a way to specify what measurements should be reported from the IMU. Currently the linear acceleration, angular velocity, magnetometer, and orientation are being recorded.
 
 
+## LCM Communication
+
+To build types again use `lcm-gen -p lcm_types/imu_*.lcm ` in the root directory. To use the `lcm-spy` command first run the build script in the folder to build the java jar representation of all the LCM types. From there the run script will load the LCM types using java reflections.
+
 ## File overview
 
 * mtdef.py - Contains all protocol variables needed

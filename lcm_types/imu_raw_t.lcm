@@ -1,0 +1,8 @@
+package exlcm;
+
+struct imu_raw_t
+{
+    int64_t  timestamp;
+    float    linear_accel[3];
+    float    angular_vel[3];
+}

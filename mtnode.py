@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+import lcm
+from exlcm import imu_raw_t
+from exlcm import imu_mag_t
+from exlcm import imu_ori_t
+
 import mtdevice
 import mtdef
 
@@ -36,15 +41,24 @@ class XSensDriver(object):
 
         # Configure (see bottom of mtdevice.py)
         # mf100fe = magnetometer at 100hz
-        # wr2000de = angular vel at 2000hz
-        # aa2000de = linear acceleration 2000hz
+        # wr2000fe = angular vel at 2000hz
+        # aa2000fe = linear acceleration 2000hz
         # oq400fe = orientation at 400hz
         # pl400fe = position (lat long) 400hz
-        output_config = mtdevice.get_output_config('mf100fe,wr2000de,aa2000de,oq400de,pl400fe')
+        output_config = mtdevice.get_output_config('mf100fe,wr2000fe,aa2000fe,oq400fe,pl400fe')
         print "Changing output configuration",
         self.mt.SetOutputConfiguration(output_config)
         print "System is Ok, Ready to Record."
 
+        # Set our variables that will publish information
+        self.has_linear = False
+        self.has_angular = False
+
+        # Store our LCM object
+        self.lc = lcm.LCM()
+
+        # Our lcm message for raw data
+        self.lcm_msg_raw = imu_raw_t()
 
     def spin(self):
         while True:
@@ -230,11 +244,15 @@ class XSensDriver(object):
             pass
 
         def fill_from_Orientation_Data(o):
-            '''Fill messages with information from 'Orientation Data' MTData2
-            block.'''
+            '''Fill messages with information from 'Orientation Data' MTData2 block.'''
             try:
                 x, y, z, w = o['Q1'], o['Q2'], o['Q3'], o['Q0']
-                print('orientation_data x='+str(x)+',y='+str(y)+',z='+str(z)+',w='+str(w))
+                #print('orientation_data x='+str(x)+',y='+str(y)+',z='+str(z)+',w='+str(w))
+                # Send LCM message
+                lcm_msg = imu_ori_t()
+                lcm_msg.timestamp = int(time.time() * 1e6)
+                lcm_msg.data = [o['Q1'], o['Q2'], o['Q3'], o['Q0']]
+                self.lc.publish('IMU_ORI_DATA', lcm_msg.encode())
             except KeyError:
                 pass
             try:
@@ -251,8 +269,18 @@ class XSensDriver(object):
 
         def fill_from_Acceleration(o):
             '''Fill messages with information from 'Acceleration' MTData2 block.'''
-            fill_from_Timestamp(o)
-            print('acceleration_data x='+str(o['accX'])+',y='+str(o['accY'])+',z='+str(o['accZ']))
+            #print('acceleration_data x='+str(o['accX'])+',y='+str(o['accY'])+',z='+str(o['accZ']))
+            self.lcm_msg_raw.linear_accel = [o['accX'],o['accY'],o['accZ']]
+            self.has_linear = True
+            try_raw_publish()
+            pass
+
+        def fill_from_Angular_Velocity(o):
+            '''Fill messages with information from 'Angular Velocity' MTData2 block.'''
+            #print('angular_vel_data x='+str(o['gyrX'])+',y='+str(o['gyrY'])+',z='+str(o['gyrZ']))
+            self.lcm_msg_raw.angular_vel = [o['gyrX'],o['gyrY'],o['gyrZ']]
+            self.has_angular = True
+            try_raw_publish()
             pass
 
         def fill_from_Position(o):
@@ -263,11 +291,6 @@ class XSensDriver(object):
         def fill_from_GNSS(o):
             '''Fill messages with information from 'GNSS' MTData2 block.'''
             print('NOT IMPLEMENTED 11')
-            pass
-
-        def fill_from_Angular_Velocity(o):
-            '''Fill messages with information from 'Angular Velocity' MTData2 block.'''
-            print('angular_vel_data x='+str(o['gyrX'])+',y='+str(o['gyrY'])+',z='+str(o['gyrZ']))
             pass
 
         def fill_from_GPS(o):
@@ -295,7 +318,13 @@ class XSensDriver(object):
 
         def fill_from_Magnetic(o):
             '''Fill messages with information from 'Magnetic' MTData2 block.'''
-            print('magnetic x='+str(o['magX'])+',y='+str(o['magY'])+',z='+str(o['magZ'])+',frame='+str(o['frame']))
+            #print('magnetic x='+str(o['magX'])+',y='+str(o['magY'])+',z='+str(o['magZ'])+',frame='+str(o['frame']))
+            # Send LCM message
+            lcm_msg = imu_mag_t()
+            lcm_msg.timestamp = int(time.time() * 1e6)
+            lcm_msg.frame = str(o['frame'])
+            lcm_msg.data = [o['magX'], o['magY'], o['magZ']]
+            self.lc.publish('IMU_MAG_DATA', lcm_msg.encode())
             pass
 
         def fill_from_Velocity(o):
@@ -319,19 +348,24 @@ class XSensDriver(object):
         def find_handler_name(name):
             return "fill_from_%s" % (name.replace(" ", "_"))
 
-        # get data
+
+        def try_raw_publish():
+            # If we do not have both, do not broadcast
+            if not self.has_linear or not self.has_angular:
+                return
+            # Send LCM message
+            self.lcm_msg_raw.timestamp = int(time.time() * 1e6)
+            self.lc.publish('IMU_RAW_DATA', self.lcm_msg_raw.encode())
+            # Reset boolean variables
+            self.has_angular = False
+            self.has_linear = False
+
+        # Get new data
         try:
             data = self.mt.read_measurement()
         except mtdef.MTTimeoutException:
             time.sleep(0.1)
             return
-        # common header
-        #self.h = Header()
-        #self.h.stamp = rospy.Time.now()
-        #self.h.frame_id = self.frame_id
-
-        # set default values
-        #self.reset_vars()
 
         # fill messages based on available data fields
         # publish available information
@@ -340,15 +374,13 @@ class XSensDriver(object):
             try:
                 locals()[find_handler_name(n)](o)
             except KeyError:
-                rospy.logwarn("Unknown MTi data packet: '%s', ignoring." % n)
+                print("Unknown MTi data packet: '%s', ignoring." % n)
 
 
 def main():
     '''Create a ROS node and instantiate the class.'''
-    #rospy.init_node('xsens_driver')
     driver = XSensDriver()
     driver.spin()
-
 
 if __name__ == '__main__':
     main()
