@@ -32,19 +32,13 @@ class XSensDriver(object):
         print("MT node interface: %s at %d bd." % (device, baudrate))
 
         # Enable config mode
-        self.mt = mtdevice.MTDevice(device, baudrate, timeout, True, True, False)
+        self.mt = mtdevice.MTDevice(device, baudrate, timeout, True, False)
 
         # Configure (see bottom of mtdevice.py)
-        # mf100fe = magnetometer at 100hz
-        # wr2000de = angular vel at 2000hz
-        # aa2000de = linear acceleration 2000hz
-        # oq400fe = orientation at 400hz
-        # pl400fe = position (lat long) 400hz
-        output_config = mtdevice.get_output_config('mf100fe,wr2000de,aa2000de,oq400de,pl400fe')
-        print "Changing output configuration",
+        output_config = mtdevice.get_output_config('ip1,iu1,oq1be,pl1ae,pa1ae,sw1')
+        print("Changing output configuration")
         self.mt.SetOutputConfiguration(output_config)
-        print "System is Ok, Ready to Record."
-
+        print("System is Ok, Ready to Record.")
 
     def spin(self):
         while True:
@@ -72,8 +66,10 @@ class XSensDriver(object):
 
         def convert_quat(q, source, dest='ENU'):
             """Convert a quaternion between ENU, NED, and NWU."""
-            def q_mult((w0, x0, y0, z0), (w1, x1, y1, z1)):
+            def q_mult(q0, q1):
                 """Quaternion multiplication."""
+                (w0, x0, y0, z0) = q0
+                (w1, x1, y1, z1) = q1
                 w = w0*w1 - x0*x1 - y0*y1 - z0*z1
                 x = w0*x1 + x0*w1 + y0*z1 - z0*y1
                 y = w0*y1 - x0*z1 + y0*w1 + z0*x1
@@ -170,7 +166,7 @@ class XSensDriver(object):
                 print('orientation ='+str(orient_data['quaternion']))
             elif 'roll' in orient_data:
                 print('orientation_data r='+str(orient_data['roll'])+',p='+str(orient_data['pitch'])+',y='+str(orient_data['yaw']))
-            
+
 
         def fill_from_Auxiliary(aux_data):
             '''Fill messages with information from 'Auxiliary' MTData block.'''
@@ -193,7 +189,7 @@ class XSensDriver(object):
             '''Fill messages with information from 'velocity' MTData block.'''
             print('Velocity x='+str(velocity_data['Vel_X'])+',y='+str(velocity_data['Vel_Y'])+',z='+str(velocity_data['Vel_Z'])+',frame='+str(velocity_data['frame']))
             pass
-            
+
 
         def fill_from_Stat(status):
             '''Fill messages with information from 'status' MTData block.'''
@@ -257,7 +253,7 @@ class XSensDriver(object):
 
         def fill_from_Position(o):
             '''Fill messages with information from 'Position' MTData2 block.'''
-            print('NOT IMPLEMENTED 10')
+            print('positon lat='+str(o['lat'])+',lon='+str(o['lon'])+',alt='+str(o['altEllipsoid']))
             pass
 
         def fill_from_GNSS(o):
@@ -340,7 +336,7 @@ class XSensDriver(object):
             try:
                 locals()[find_handler_name(n)](o)
             except KeyError:
-                rospy.logwarn("Unknown MTi data packet: '%s', ignoring." % n)
+                print("Unknown MTi data packet: '%s', ignoring." % n)
 
 
 def main():

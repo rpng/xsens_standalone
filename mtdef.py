@@ -1,5 +1,5 @@
 """Constant and messages definition for MT communication."""
-
+import struct
 
 class DeviceState:
     """State of the device"""
@@ -13,6 +13,8 @@ class MID:
     """Values for the message id (MID)"""
     # Error message, 1 data byte
     Error = 0x42
+    # Warning message, 1 data byte
+    Warning = 0x43
 
     # State MID
     # Wake up procedure
@@ -35,6 +37,11 @@ class MID:
     ReqProductCode = 0x1C
     # Product code (max 20 bytes data)
     ProductCode = 0x1D
+    # ReqHardwareVersion
+    ReqHardwareVersion = 0x1E
+    # HardwareVersion
+    HardwareVersion = 0x1F
+
     # Request firmware revision
     ReqFWRev = 0x12
     # Firmware revision, 3 bytes: major minor rev
@@ -67,8 +74,7 @@ class MID:
     ReqConfiguration = 0x0C
     # Configuration, 118 bytes
     Configuration = 0x0D
-    # Sampling period (MTi/MTi-G only), 2 bytes
-    SetPeriod = 0x04
+
     # Extended output mode (MTi-10/100), 2 bytes, bit 4 for extended UART
     SetExtOutputMode = 0x86
     # Output configuration (MTi-1/10/100 series only), N*4 bytes
@@ -77,10 +83,11 @@ class MID:
     SetStringOutputType = 0x8E
     # Set sensor of local alignment quaternion
     SetAlignmentRotation = 0xEC
-    # Output mode (MTi/MTi-G only), 2 bytes
-    SetOutputMode = 0xD0
-    # Output settings (MTi/MTi-G only), 4 bytes
-    SetOutputSettings = 0xD2
+
+    # Lever arm of the GPSin sensor coordinates (MTi-G and MTi-700 only),
+    # 3*4 bytes
+    SetGnssLeverArm = 0x68
+    SetGnssLeverArmAck = 0x69
 
     # Data messages
     # Request MTData message (for 65535 skip factor)
@@ -103,15 +110,26 @@ class MID:
     ReqAvailableScenarios = 0x62
     # Available Scenarios
     AvailableScenarios = 0x63
-    # Current XKF scenario, 2 bytes
-    SetCurrentScenario = 0x64
+    # SetFilterProfile, data
+    SetFilterProfile = 0x64
     # Magnitude of the gravity used for the sensor fusion mechanism, 4 bytes
     SetGravityMagnitude = 0x66
     # Latitude, Longitude and Altitude for local declination and gravity
     # (MTi-10/100 series only), 24 bytes
     SetLatLonAlt = 0x6E
+    SetLatLonAltAck = 0x6F
     # Initiate No Rotation procedure (not on MTi-G), 2 bytes
     SetNoRotation = 0x22
+    # SetGnssPlatform
+    SetGnssPlatform = 0x76
+    # SetGnssReceiverSettings
+    SetGnssReceiverSettings = 0xAC
+    # SetInitialHeading
+    SetInitialHeading = 0xD6
+    SetInitialHeadingAck = 0xD7
+    # ForwardGnssData
+    ForwardGnssData = 0xE2
+    ForwardGnssDataAck = 0xE3
 
 
 class DeprecatedMID:
@@ -136,17 +154,21 @@ class DeprecatedMID:
     SetSyncOutSettings = 0xD8
 
     # Configuration messages
-    # Skip factor (MTi/MTi-G only), 2 bytes
-    SetOutputSkipFactor = 0xD4
+
     # Object alignment matrix, 9*4 bytes
     SetObjectAlignment = 0xE0
-
+    # Sampling period (MTi/MTi-G only), 2 bytes
+    SetPeriod = 0x04
+    # Skip factor (MTi/MTi-G only), 2 bytes
+    SetOutputSkipFactor = 0xD4
+    # Output mode (MTi/MTi-G only), 2 bytes
+    SetOutputMode = 0xD0
+    # Output settings (MTi/MTi-G only), 4 bytes
+    SetOutputSettings = 0xD2
     # XKF Filter messages
     # Heading (MTi only), 4 bytes
     SetHeading = 0x82
-    # Lever arm of the GPSin sensor coordinates (MTi-G and MTi-700 only),
-    # 3*4 bytes
-    SetLeverArmGPS = 0x68
+
     # Magnetic declination (MTi-G only), 4 bytes
     SetMagneticDeclination = 0x6A
     # Latitude, Longitude and Altitude for local declination and gravity
@@ -157,7 +179,7 @@ class DeprecatedMID:
 def getName(cls, value):
     '''Return the name of the first found member of class cls with given
     value.'''
-    for k, v in cls.__dict__.iteritems():
+    for k, v in cls.__dict__.items():
         if v == value:
             return k
     return ''
@@ -179,20 +201,23 @@ class Baudrates(object):
     """Baudrate information and conversion."""
     # Baudrate mapping between ID and value
     Baudrates = [
-        (0x80, 921600),
-        (0x0A, 921600),
-        (0x00, 460800),
-        (0x01, 230400),
-        (0x02, 115200),
-        (0x03,  76800),
-        (0x04,  57600),
-        (0x05,  38400),
-        (0x06,  28800),
-        (0x07,  19200),
-        (0x08,  14400),
-        (0x09,   9600),
-        (0x0B,   4800),
-        (0x80, 921600)]
+        (0x0D, 4000000),
+        (0x0E, 3686400),
+        (0x0C, 2000000),
+        (0x80,  921600),
+        (0x0A,  921600),
+        (0x00,  460800),
+        (0x01,  230400),
+        (0x02,  115200),
+        (0x03,   76800),
+        (0x04,   57600),
+        (0x05,   38400),
+        (0x06,   28800),
+        (0x07,   19200),
+        (0x08,   14400),
+        (0x09,    9600),
+        (0x0B,    4800),
+        (0x80,  921600)]
 
     @classmethod
     def get_BRID(cls, baudrate):
@@ -251,23 +276,125 @@ class OutputSettings:
     Coordinates_NED = 0x80000000
 
 
-class XDIGroup:
+class XDIType:
     """Values for the XDI groups."""
-    Temperature = 0x0800
-    Timestamp = 0x1000
-    OrientationData = 0x2000
-    Pressure = 0x3000
-    Acceleration = 0x4000
-    Position = 0x5000
-    GNSS = 0x7000
-    AngularVelocity = 0x8000
-    GPS = 0x8800
-    SensorComponentReadout = 0xA000
-    AnalogIn = 0xB000  # deprecated
-    Magnetic = 0xC000
-    Velocity = 0xD000
-    Status = 0xE000
+    #
+    TemperatureGroup = 0x0800
+    Temperature = 0x0810
+    #
+    TimestampGroup = 0x1000
+    UtcTime = 0x1010
+    PacketCounter = 0x1020
+    SampleTimeFine = 0x1060
+    SampleTimeCoarse = 0x1070
+    #
+    OrientationGroup = 0x2000
+    Quaternion = 0x2010
+    RotationMatrix = 0x2020
+    EulerAngles = 0x2030
+    #
+    PressureGroup = 0x3000
+    BaroPressure = 0x3010
+    #
+    AccelerationGroup = 0x4000
+    DeltaV = 0x4010
+    Acceleration = 0x4020
+    FreeAcceleration = 0x4030
+    AccelerationHR = 0x4040
+    #
+    PositionGroup = 0x5000
+    AltitudeEllipsoid = 0x5020
+    PositionEcef = 0x5030
+    LatLon = 0x5040
+    #
+    GnssGroup = 0x7000
+    GnssPvtData = 0x7010
+    GnssSatInfo = 0x7020
+    GnssPvtPulse = 0x7030
+    #
+    AngularVelocityGroup = 0x8000
+    RateOfTurn = 0x8020
+    DeltaQ = 0x8030
+    RateOfTurnHR = 0x8040
+    #
+    RawSensorGroup = 0xA000
+    RawAccGyrMagTemp = 0xA010
+    RawGyroTemp = 0xA020
+    #
+    MagneticGroup = 0xC000
+    MagneticField = 0xC020
+    #
+    VelocityGroup = 0xD000
+    VelocityXYZ = 0xD010
+    #
+    StatusGroup = 0xE000
+    StatusByte = 0xE010
+    StatusWord = 0xE020
+    DeviceId = 0xE030
+    LocationId = 0xE040
 
+
+class XDIDataId:
+    """Settings for MTData2 Data Identifier"""
+    Float32 = 0x00
+    Fp1220 = 0x01
+    Fp1632 = 0x02
+    Float64 = 0x03
+    ENU = 0x00
+    NED = 0x04
+    NWU = 0x08
+
+class SyncFunction:
+    OnePpsTimePulse = 14 # 0x0E
+    ClockBiasEstimation = 9 # 0x09
+    IntervalTransmitionMeasurement = 4 # 0x04
+    ResetTimer = 2 # 0x02
+    SampleAndSend = 7 # 0x07
+    SendLast = 8 # 0x08
+    StartSampling = 11 # 0x0B
+    TriggerIndication = 3 # 0x03
+
+class SyncLine:
+    Bi1In = 3 # 0x03
+    Bi1Out = 4 # 0x04
+    ClockIn  = 0 # 0x00
+    Gnss1Pps = 8 # 0x08
+    GnssClockIn = 1 # 0x01
+    In1 = 2 # 0x02
+    In2 = 9 # 0x09
+    Out = 7 # 0x07
+    ReqData = 6 # 0x06
+
+class SyncPolarity:
+    Disabled = 0
+    Positive = 1
+    Negative = 2
+    Both  = 3
+
+class SyncSetting:
+    def __init__(self, function = SyncFunction.OnePpsTimePulse,
+            line = SyncLine.ClockIn, polarity = SyncPolarity.Disabled,
+            triggerOnce = 0, skipFirst = 0, skipFactor = 0,
+            pulseWidth = 0, offset = 0):
+        self.function = function
+        self.line = line
+        self.polarity = polarity
+        self.triggerOnce = triggerOnce # Trigger only once (1) or multiple times (0).
+        self.skipFirst = skipFirst # The number of initial events to skip before taking action
+        self.skipFactor = skipFactor # The number of events to skip after taking the action before taking action again.
+        self.pulseWidth = pulseWidth # The width of the generated pulse in 100μs
+        self.offset = offset # Offset from event to pulse generation (100μs units, range [-30000..+30000]).
+    def toBytes(self):
+        lst = (self.function, self.line, self.polarity, self.triggerOnce,
+            self.skipFirst, self.skipFactor, self.pulseWidth, self.offset)
+        return struct.pack('!BBBBHHHH', *lst)
+    def fromBytes(data):
+        lst = struct.unpack('!BBBBHHHH', data)
+        return SyncSetting(*lst)
+    def __repr__(self):
+        return f"SyncSetting({self.function},{self.line},{self.polarity},{self.triggerOnce},{self.skipFirst},{self.skipFactor},{self.pulseWidth},{self.offset})"
+    def __str__(self):
+        return f"SyncSetting {self.function=},{self.line=},{self.polarity=},{self.triggerOnce=},{self.skipFirst=},{self.skipFactor=},{self.pulseWidth=},{self.offset=}"
 
 class MTException(Exception):
     def __init__(self, message):
