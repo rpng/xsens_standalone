@@ -1,16 +1,19 @@
 #!/usr/bin/env python
-import serial
+import getopt
+import glob
+import json
+import pprint
+import re
 import struct
 import sys
-import getopt
 import time
-import glob
-import re
-import pprint
 
-from mtdef import MID, OutputMode, OutputSettings, MTException, Baudrates, \
-    XDIGroup, getMIDName, DeviceState, DeprecatedMID, MTErrorMessage, \
-    MTTimeoutException
+import serial
+import zmq
+
+from mtdef import (MID, Baudrates, DeprecatedMID, DeviceState, MTErrorMessage,
+                   MTException, MTTimeoutException, OutputMode, OutputSettings,
+                   XDIGroup, getMIDName)
 
 
 ################################################################
@@ -19,7 +22,7 @@ from mtdef import MID, OutputMode, OutputSettings, MTException, Baudrates, \
 class MTDevice(object):
     """XSens MT device communication object."""
 
-    def __init__(self, port, baudrate=115200, timeout=0.002, autoconf=True,
+    def __init__(self, port, baudrate=115200, timeout=0.02, autoconf=True,
                  config_mode=False, verbose=False):
         """Open device."""
         self.verbose = verbose
@@ -1475,8 +1478,15 @@ def main():
             #     mode, settings, length = mt.auto_config()
             #     print mode, settings, length
             try:
+                port = "5556"
+                context = zmq.Context()
+                socket = context.socket(zmq.PUB)
+                socket.bind("tcp://*:%s" % port)
+                topic = "imu"
                 while True:
-                    print mt.read_measurement(mode, settings)
+                    output = mt.read_measurement(mode, settings)
+                    socket.send(json.dumps(output))
+                    print(output)
             except KeyboardInterrupt:
                 pass
     except MTErrorMessage as e:
